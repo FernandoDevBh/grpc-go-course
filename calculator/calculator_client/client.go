@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
 
 	"github.com/FernandoDevBh/grpc-go-course/calculator/calculatorpb"
 	"google.golang.org/grpc"
@@ -27,7 +28,9 @@ func main() {
 
 	//doCalculatorSum(c)
 
-	doCalculatorPrimeDecom(c)
+	//doCalculatorPrimeDecom(c)
+
+	doAverageComposition(c)
 }
 
 func doCalculatorSum(c calculatorpb.CalculatorServiceClient) {
@@ -71,4 +74,52 @@ func doCalculatorPrimeDecom(c calculatorpb.CalculatorServiceClient) {
 		}
 		log.Printf("Response from PrimeNumberDecomposition: %v\n", msg.GetPrimeFactor())
 	}
+}
+
+func doAverageComposition(c calculatorpb.CalculatorServiceClient) {
+	fmt.Println("Starting to do a Client Streaming RPC...")
+
+	reqs := []*calculatorpb.ComputeAverageRequest{
+		&calculatorpb.ComputeAverageRequest{
+			AverageComposition: &calculatorpb.AverageComposition{
+				Number: 1,
+			},
+		},
+		&calculatorpb.ComputeAverageRequest{
+			AverageComposition: &calculatorpb.AverageComposition{
+				Number: 2,
+			},
+		},
+		&calculatorpb.ComputeAverageRequest{
+			AverageComposition: &calculatorpb.AverageComposition{
+				Number: 3,
+			},
+		},
+		&calculatorpb.ComputeAverageRequest{
+			AverageComposition: &calculatorpb.AverageComposition{
+				Number: 4,
+			},
+		},
+	}
+
+	stream, err := c.ComputeAverage(context.Background())
+
+	if err != nil {
+		log.Fatalf("error while calling AverageComposition: %v", err)
+	}
+
+	// we iterate over our slice and send each message individually
+	for _, req := range reqs {
+		fmt.Printf("Sending req: %v\n", req)
+		stream.Send(req)
+		time.Sleep(1000 * time.Millisecond)
+	}
+
+	res, err := stream.CloseAndRecv()
+
+	if err != nil {
+		log.Fatalf("error while receiving response from ComputeAverage: %v", err)
+	}
+
+	fmt.Printf("ComputeAverage Response: %v\n", res)
 }
