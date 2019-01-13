@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
+
+	"google.golang.org/grpc/codes"
 
 	"github.com/FernandoDevBh/grpc-go-course/calculator/calculatorpb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 const port = "50051"
@@ -63,6 +67,52 @@ func (*server) ComputeAverage(stream calculatorpb.CalculatorService_ComputeAvera
 		counter++
 		sum += req.AverageComposition.GetNumber()
 	}
+}
+
+func (*server) FindMaximum(stream calculatorpb.CalculatorService_FindMaximumServer) error {
+	fmt.Printf("FindMaximum function was invoked with streaming request: %v\n", stream)
+
+	var maximum int32
+
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+
+		if err != nil {
+			log.Fatalf("Error while reading client stream: %v", err)
+			return err
+		}
+
+		number := req.GetNumber()
+		if number > maximum {
+			maximum = number
+			err = stream.Send(&calculatorpb.FindMaximumResponse{
+				Maximum: maximum,
+			})
+
+			if err != nil {
+				log.Fatalf("Error while sending stream: %v", err)
+				return err
+			}
+		}
+	}
+}
+
+func (*server) SquareRoot(ctx context.Context, req *calculatorpb.SquareRootRequest) (*calculatorpb.SquareRootResponse, error) {
+	fmt.Printf("SquareRoot function was invoked with %v\n", req)
+	number := req.GetNumber()
+	if number < 0 {
+		return nil, status.Error(
+			codes.InvalidArgument,
+			fmt.Sprintf("Receive a negative number: %v", number),
+		)
+	}
+
+	return &calculatorpb.SquareRootResponse{
+		NumberRoot: math.Sqrt(float64(number)),
+	}, nil
 }
 
 func main() {

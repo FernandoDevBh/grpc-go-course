@@ -7,8 +7,11 @@ import (
 	"log"
 	"time"
 
+	"google.golang.org/grpc/codes"
+
 	"github.com/FernandoDevBh/grpc-go-course/calculator/calculatorpb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 const port = "50051"
@@ -30,7 +33,11 @@ func main() {
 
 	//doCalculatorPrimeDecom(c)
 
-	doAverageComposition(c)
+	//doAverageComposition(c)
+
+	//doBiDiStreaming(c)
+
+	doErrorUnary(c)
 }
 
 func doCalculatorSum(c calculatorpb.CalculatorServiceClient) {
@@ -122,4 +129,74 @@ func doAverageComposition(c calculatorpb.CalculatorServiceClient) {
 	}
 
 	fmt.Printf("ComputeAverage Response: %v\n", res)
+}
+
+func doBiDiStreaming(c calculatorpb.CalculatorServiceClient) {
+	fmt.Println("Starting to do a FindMaximum BiDi Streaming RPC...")
+
+	stream, err := c.FindMaximum(context.Background())
+	if err != nil {
+		log.Fatalf("error while calling FindMaximum: %v", err)
+	}
+
+	waitc := make(chan struct{})
+
+	// send go routine
+	go func() {
+		numbers := []int32{4, 7, 2, 19, 4, 6, 32}
+		for _, number := range numbers {
+			fmt.Printf("Sending number: %v\n", number)
+			stream.Send(&calculatorpb.FindMaximumRequest{
+				Number: number,
+			})
+			time.Sleep(1000 * time.Millisecond)
+		}
+		stream.CloseSend()
+	}()
+	// receive go routine
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Fatalf("Problem while reading client: %v", err)
+				break
+			}
+			fmt.Printf("Received a new maximum of...: %v\n", res.GetMaximum())
+		}
+		close(waitc)
+	}()
+
+	<-waitc
+}
+
+func doErrorUnary(c calculatorpb.CalculatorServiceClient) {
+	fmt.Println("Starting to do a doErrorUnary...")
+	// correct call
+	doErrorCall(c, 10)
+
+	// error call
+	doErrorCall(c, -10)
+}
+
+func doErrorCall(c calculatorpb.CalculatorServiceClient, n int32) {
+	res, err := c.SquareRoot(context.Background(), &calculatorpb.SquareRootRequest{Number: n})
+	if err != nil {
+		respErr, ok := status.FromError(err)
+		if ok {
+			// actual error from gRPC (user error)
+			fmt.Printf("Error message from server: %v\n", respErr.Message())
+			fmt.Println(respErr.Code())
+			if respErr.Code() == codes.InvalidArgument {
+				fmt.Println("We probably sent a negative number!")
+				return
+			}
+		} else {
+			log.Fatalf("Big Error calling SquareRoot: %v", respErr)
+			return
+		}
+	}
+	fmt.Printf("Result of square root of %v: %v\n", n, res.GetNumberRoot())
 }
